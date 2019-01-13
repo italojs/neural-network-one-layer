@@ -15,339 +15,327 @@ import (
 	"gonum.org/v1/gonum/mat"
 )
 
-// neuralNet contains all of the information
-// that defines a trained neural network.
-type neuralNet struct {
-	config  neuralNetConfig
-	wHidden *mat.Dense
-	bHidden *mat.Dense
-	wOut    *mat.Dense
-	bOut    *mat.Dense
+// redeNeural contem todas as informações da
+// nossa rede neural
+type redeNeural struct {
+	config  redeNeuralConfig
+	pesosOculta *mat.Dense
+	biasOculta *mat.Dense
+	pesosSaida    *mat.Dense
+	biasSaida    *mat.Dense
 }
 
-// neuralNetConfig defines our neural network
-// architecture and learning parameters.
-type neuralNetConfig struct {
-	inputNeurons  int
-	outputNeurons int
-	hiddenNeurons int
-	numEpochs     int
-	learningRate  float64
+// redeNeuralConfig define como nosssa rede será
+type redeNeuralConfig struct {
+	neuroniosEntrada  int
+	neuroniosSaida int
+	neuroniosOculta int
+	epocas     int
+	taxaAprendizado  float64
 }
 
-// NewNetwork initializes a new neural network.
-func newNetwork(config neuralNetConfig) *neuralNet {
-	return &neuralNet{config: config}
+// novaRedeNeural retorna a instancia de uma rede neural
+func novaRedeNeural(config redeNeuralConfig) *redeNeural {
+	return &redeNeural{config: config}
 }
 
-// sumAlongAxis sums a matrix along a
-// particular dimension, preserving the
-// other dimension.
-func sumAlongAxis(axis int, m *mat.Dense) (*mat.Dense, error) {
+// sumaNoEixo soma uma matriz ao longo
+// de um eixo em especifico (0 ou 1)
+// preservando a outra dimenção
+func sumaNoEixo(eixo int, m *mat.Dense) (*mat.Dense, error) {
 	
-	numRows, numCols := m.Dims()
+	numLinhas, numColunas := m.Dims()
 	
-	var output *mat.Dense
+	var saida *mat.Dense
 	
-	switch axis {
+	switch eixo {
 	case 0:
-		data := make([]float64, numCols)
-		for i := 0; i < numCols; i++ {
+		data := make([]float64, numColunas)
+		for i := 0; i < numColunas; i++ {
 			col := mat.Col(nil, i, m)
 			data[i] = floats.Sum(col)
 		}
-		output = mat.NewDense(1, numCols, data)
+		saida = mat.NewDense(1, numColunas, data)
 	case 1:
-		data := make([]float64, numRows)
-		for i := 0; i < numRows; i++ {
+		data := make([]float64, numLinhas)
+		for i := 0; i < numLinhas; i++ {
 			row := mat.Row(nil, i, m)
 			data[i] = floats.Sum(row)
 		}
-		output = mat.NewDense(numRows, 1, data)
+		saida = mat.NewDense(numLinhas, 1, data)
 	default:
-		return nil, errors.New("invalid axis, must be 0 or 1")
+		return nil, errors.New("Eixo ivalido, deve ser 0 ou 1")
 	}
 	
-	return output, nil
+	return saida, nil
 }
 
-// sigmoid implements the sigmoid function
-// for use in activation functions.
+// FUnção de ativação
 func sigmoid(x float64) float64 {
 	return 1.0 / (1.0 + math.Exp(-x))
 }
 
-// sigmoidPrime implements the derivative
-// of the sigmoid function for backpropagation.
-func sigmoidPrime(x float64) float64 {
+// derivada da sigmoid
+func sigmoidDerivada(x float64) float64 {
 	return x * (1.0 - x)
 }
 
-// backpropagate completes the backpropagation method.
-func (nn *neuralNet) backpropagate(x, y, wHidden, bHidden, wOut, bOut, output *mat.Dense) error {
+// esse metodo executa todo o feed forward e o back propagate
+func (rn *redeNeural) backpropagate(x, y, pesosOculta, biasOculta, pesosSaida, biasSaida, saida *mat.Dense) error {
 
-	// Loop over the number of epochs utilizing
-	// backpropagation to train our model.
-	for i := 0; i < nn.config.numEpochs; i++ {
+	//treinamento
+	for i := 0; i < rn.config.epocas; i++ {
 		// Complete the feed forward process.
-		hiddenLayerInput := new(mat.Dense)
-		hiddenLayerInput.Mul(x, wHidden)
-		addBHidden := func(_, col int, v float64) float64 { return v + bHidden.At(0, col) }
-		hiddenLayerInput.Apply(addBHidden, hiddenLayerInput)
+		EntradasLayerOculta := new(mat.Dense)
+		EntradasLayerOculta.Mul(x, pesosOculta)
+		addBiasOculta := func(_, col int, v float64) float64 { return v + biasOculta.At(0, col) }
+		EntradasLayerOculta.Apply(addBiasOculta, EntradasLayerOculta)
 
-		hiddenLayerActivations := new(mat.Dense)
-		applySigmoid := func(_, _ int, v float64) float64 { return sigmoid(v) }
-		hiddenLayerActivations.Apply(applySigmoid, hiddenLayerInput)
+		AtivacaoLayerOculta := new(mat.Dense)
+		aplicaSigmoid := func(_, _ int, v float64) float64 { return sigmoid(v) }
+		AtivacaoLayerOculta.Apply(aplicaSigmoid, EntradasLayerOculta)
 
-		outputLayerInput := new(mat.Dense)
-		outputLayerInput.Mul(hiddenLayerActivations, wOut)
-		addBOut := func(_, col int, v float64) float64 { return v + bOut.At(0, col) }
-		outputLayerInput.Apply(addBOut, outputLayerInput)
-		output.Apply(applySigmoid, outputLayerInput)
+		saidaCamadaEntrada := new(mat.Dense)
+		saidaCamadaEntrada.Mul(AtivacaoLayerOculta, pesosSaida)
+		addBiasSaida := func(_, col int, v float64) float64 { return v + biasSaida.At(0, col) }
+		saidaCamadaEntrada.Apply(addBiasSaida, saidaCamadaEntrada)
+		saida.Apply(aplicaSigmoid, saidaCamadaEntrada)
 
 		// Complete the backpropagation.
-		networkError := new(mat.Dense)
-		networkError.Sub(y, output)
+		ErroRede := new(mat.Dense)
+		ErroRede.Sub(y, saida)
 
-		slopeOutputLayer := new(mat.Dense)
-		applySigmoidPrime := func(_, _ int, v float64) float64 { return sigmoidPrime(v) }
-		slopeOutputLayer.Apply(applySigmoidPrime, output)
+		derivadaCamadaSaida := new(mat.Dense)
+		aplicasigmoidDerivada := func(_, _ int, v float64) float64 { return sigmoidDerivada(v) }
+		derivadaCamadaSaida.Apply(aplicasigmoidDerivada, saida)
 		slopeHiddenLayer := new(mat.Dense)
-		slopeHiddenLayer.Apply(applySigmoidPrime, hiddenLayerActivations)
+		slopeHiddenLayer.Apply(aplicasigmoidDerivada, AtivacaoLayerOculta)
 
-		dOutput := new(mat.Dense)
-		dOutput.MulElem(networkError, slopeOutputLayer)
-		errorAtHiddenLayer := new(mat.Dense)
-		errorAtHiddenLayer.Mul(dOutput, wOut.T())
+		deltaSaida := new(mat.Dense)
+		deltaSaida.MulElem(ErroRede, derivadaCamadaSaida)
+		errorCamadaOculta := new(mat.Dense)
+		errorCamadaOculta.Mul(deltaSaida, pesosSaida.T())
 
-		dHiddenLayer := new(mat.Dense)
-		dHiddenLayer.MulElem(errorAtHiddenLayer, slopeHiddenLayer)
+		deltaCamadaOculta := new(mat.Dense)
+		deltaCamadaOculta.MulElem(errorCamadaOculta, slopeHiddenLayer)
 
-		// Adjust the parameters.
-		wOutAdj := new(mat.Dense)
-		wOutAdj.Mul(hiddenLayerActivations.T(), dOutput)
-		wOutAdj.Scale(nn.config.learningRate, wOutAdj)
-		wOut.Add(wOut, wOutAdj)
+		// Aajuste dos pesos e bias
+		pesosSaidaAjustato := new(mat.Dense)
+		pesosSaidaAjustato.Mul(AtivacaoLayerOculta.T(), deltaSaida)
+		pesosSaidaAjustato.Scale(rn.config.taxaAprendizado, pesosSaidaAjustato)
+		pesosSaida.Add(pesosSaida, pesosSaidaAjustato)
 
-		bOutAdj, err := sumAlongAxis(0, dOutput)
+		biasSaidaAjustado, err := sumaNoEixo(0, deltaSaida)
 		if err != nil {
 			return err
 		}
-		bOutAdj.Scale(nn.config.learningRate, bOutAdj)
-		bOut.Add(bOut, bOutAdj)
+		biasSaidaAjustado.Scale(rn.config.taxaAprendizado, biasSaidaAjustado)
+		biasSaida.Add(biasSaida, biasSaidaAjustado)
 
-		wHiddenAdj := new(mat.Dense)
-		wHiddenAdj.Mul(x.T(), dHiddenLayer)
-		wHiddenAdj.Scale(nn.config.learningRate, wHiddenAdj)
-		wHidden.Add(wHidden, wHiddenAdj)
+		pesosOcultaAjustado := new(mat.Dense)
+		pesosOcultaAjustado.Mul(x.T(), deltaCamadaOculta)
+		pesosOcultaAjustado.Scale(rn.config.taxaAprendizado, pesosOcultaAjustado)
+		pesosOculta.Add(pesosOculta, pesosOcultaAjustado)
 
-		bHiddenAdj, err := sumAlongAxis(0, dHiddenLayer)
+		biasOcultaAjustado, err := sumaNoEixo(0, deltaCamadaOculta)
 		if err != nil {
 			return err
 		}
-		bHiddenAdj.Scale(nn.config.learningRate, bHiddenAdj)
-		bHidden.Add(bHidden, bHiddenAdj)
+		biasOcultaAjustado.Scale(rn.config.taxaAprendizado, biasOcultaAjustado)
+		biasOculta.Add(biasOculta, biasOcultaAjustado)
 	}
 
 	return nil
 }
 
-// train trains a neural network using backpropagation.
-func (nn *neuralNet) train(x, y *mat.Dense) error {
+// inicia a rede neural, treina
+func (rn *redeNeural) treinar(x, y *mat.Dense) error {
 	
 	// Initialize biases/weights.
-	randSource := rand.NewSource(time.Now().UnixNano())
-	randGen := rand.New(randSource)
+	aleatoriedade := rand.NewSource(time.Now().UnixNano())
+	geradorAleatoriedade := rand.New(aleatoriedade)
 	
-	wHidden := mat.NewDense(nn.config.inputNeurons, nn.config.hiddenNeurons, nil)
-	bHidden := mat.NewDense(1, nn.config.hiddenNeurons, nil)
-	wOut := mat.NewDense(nn.config.hiddenNeurons, nn.config.outputNeurons, nil)
-	bOut := mat.NewDense(1, nn.config.outputNeurons, nil)
+	pesosOculta := mat.NewDense(rn.config.neuroniosEntrada, rn.config.neuroniosOculta, nil)
+	biasOculta := mat.NewDense(1, rn.config.neuroniosOculta, nil)
+	pesosSaida := mat.NewDense(rn.config.neuroniosOculta, rn.config.neuroniosSaida, nil)
+	biasSaida := mat.NewDense(1, rn.config.neuroniosSaida, nil)
 	
-	wHiddenRaw := wHidden.RawMatrix().Data
-	bHiddenRaw := bHidden.RawMatrix().Data
-	wOutRaw := wOut.RawMatrix().Data
-	bOutRaw := bOut.RawMatrix().Data
+	pesosOcultaRaw := pesosOculta.RawMatrix().Data
+	biasOcultaRaw := biasOculta.RawMatrix().Data
+	pesosSaidaRaw := pesosSaida.RawMatrix().Data
+	biasSaidaRaw := biasSaida.RawMatrix().Data
 	
 	for _, param := range [][]float64{
-		wHiddenRaw,
-		bHiddenRaw,
-		wOutRaw,
-		bOutRaw,
+		pesosOcultaRaw,
+		biasOcultaRaw,
+		pesosSaidaRaw,
+		biasSaidaRaw,
 	} {
 		for i := range param {
-			param[i] = randGen.Float64()
+			param[i] = geradorAleatoriedade.Float64()
 		}
 	}
 	
-	// Define the output of the neural network.
-	output := new(mat.Dense)
+	// Define a saida da rede neural
+	saida := new(mat.Dense)
 
-	// Use backpropagation to adjust the weights and biases.
-	if err := nn.backpropagate(x, y, wHidden, bHidden, wOut, bOut, output); err != nil {
+	if err := rn.backpropagate(x, y, pesosOculta, biasOculta, pesosSaida, biasSaida, saida); err != nil {
 		return err
 	}
 	
-	// Define our trained neural network.
-	nn.wHidden = wHidden
-	nn.bHidden = bHidden
-	nn.wOut = wOut
-	nn.bOut = bOut
+	// Pesos e bias definidos
+	rn.pesosOculta = pesosOculta
+	rn.biasOculta = biasOculta
+	rn.pesosSaida = pesosSaida
+	rn.biasSaida = biasSaida
 
 
 	return nil
 }
 
-// predict makes a prediction based on a trained
-// neural network.
-func (nn *neuralNet) predict(x *mat.Dense) (*mat.Dense, error) {
+//  Faz a classificação/predição de um valor cujo o label é desconhecido
+func (rn *redeNeural) Classifique(x *mat.Dense) (*mat.Dense, error) {
 
-	// Check to make sure that our neuralNet value
-	// represents a trained model.
-	if nn.wHidden == nil || nn.wOut == nil {
-		return nil, errors.New("the supplied weights are empty")
+
+	if rn.pesosOculta == nil || rn.pesosSaida == nil {
+		return nil, errors.New("Os pesos estão vazios")
 	}
-	if nn.bHidden == nil || nn.bOut == nil {
-		return nil, errors.New("the supplied biases are empty")
+	if rn.biasOculta == nil || rn.biasSaida == nil {
+		return nil, errors.New("Os bias estão vazios")
 	}
 
-	// Define the output of the neural network.
-	output := new(mat.Dense)
+	saida := new(mat.Dense)
 
-	// Complete the feed forward process.
-	hiddenLayerInput := new(mat.Dense)
-	hiddenLayerInput.Mul(x, nn.wHidden)
-	addBHidden := func(_, col int, v float64) float64 { return v + nn.bHidden.At(0, col) }
-	hiddenLayerInput.Apply(addBHidden, hiddenLayerInput)
+	// processo de feed forwarde com os pesos e bias que já obtemos 
+	// no processo de treinamento
+	EntradasLayerOculta := new(mat.Dense)
+	EntradasLayerOculta.Mul(x, rn.pesosOculta)
+	addBiasOculta := func(_, col int, v float64) float64 { return v + rn.biasOculta.At(0, col) }
+	EntradasLayerOculta.Apply(addBiasOculta, EntradasLayerOculta)
 
-	hiddenLayerActivations := new(mat.Dense)
-	applySigmoid := func(_, _ int, v float64) float64 { return sigmoid(v) }
-	hiddenLayerActivations.Apply(applySigmoid, hiddenLayerInput)
+	AtivacaoLayerOculta := new(mat.Dense)
+	aplicaSigmoid := func(_, _ int, v float64) float64 { return sigmoid(v) }
+	AtivacaoLayerOculta.Apply(aplicaSigmoid, EntradasLayerOculta)
 
-	outputLayerInput := new(mat.Dense)
-	outputLayerInput.Mul(hiddenLayerActivations, nn.wOut)
-	addBOut := func(_, col int, v float64) float64 { return v + nn.bOut.At(0, col) }
-	outputLayerInput.Apply(addBOut, outputLayerInput)
-	output.Apply(applySigmoid, outputLayerInput)
+	saidaCamadaEntrada := new(mat.Dense)
+	saidaCamadaEntrada.Mul(AtivacaoLayerOculta, rn.pesosSaida)
+	addBiasSaida := func(_, col int, v float64) float64 { return v + rn.biasSaida.At(0, col) }
+	saidaCamadaEntrada.Apply(addBiasSaida, saidaCamadaEntrada)
+	saida.Apply(aplicaSigmoid, saidaCamadaEntrada)
 
-	return output, nil
+	return saida, nil
 }
 
-func makeInputsAndLabels(fileName string) (*mat.Dense, *mat.Dense) {
-	// Open the dataset file.
+func LerDados(fileName string) (*mat.Dense, *mat.Dense) {
+	// Abra os arquivo do nosso dataset
 	f, err := os.Open(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
 
-	// Create a new CSV reader reading from the opened file.
 	reader := csv.NewReader(f)
 	reader.FieldsPerRecord = 7
 
-	// Read in all of the CSV records
+	// Leia todas as linhas do CSV
 	rawCSVData, err := reader.ReadAll()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// inputsData and labelsData will hold all the
-	// float values that will eventually be
-	// used to form matrices.
-	inputsData := make([]float64, 4*len(rawCSVData))
-	labelsData := make([]float64, 3*len(rawCSVData))
+	// dadosEntrada e labelsEntrada irão armazenar
+	// todos os dados do nosso dataset
+	dadosEntrada := make([]float64, 4*len(rawCSVData))
+	labelsEntrada := make([]float64, 3*len(rawCSVData))
 
-	// Will track the current index of matrix values.
-	var inputsIndex int
+	// vaiaveis de controle
+	var entradasIndex int
 	var labelsIndex int
 
-	// Sequentially move the rows into a slice of floats.
+	// Mova-se pelas as linhas
 	for idx, record := range rawCSVData {
 
-		// Skip the header row.
+		// Pule a primeira linha do dataset
 		if idx == 0 {
 			continue
 		}
 
-		// Loop over the float columns.
+		// Passe pelas colunas
 		for i, val := range record {
 
-			// Convert the value to a float.
-			parsedVal, err := strconv.ParseFloat(val, 64)
+			// Converta o valor para float
+			valorConvertido, err := strconv.ParseFloat(val, 64)
 			if err != nil {
 				log.Fatal(err)
 			}
 
-			// Add to the labelsData if relevant.
+			// adicione para labelsEntrada se for relevante
 			if i == 4 || i == 5 || i == 6 {
-				labelsData[labelsIndex] = parsedVal
+				labelsEntrada[labelsIndex] = valorConvertido
 				labelsIndex++
 				continue
 			}
 
-			// Add the float value to the slice of floats.
-			inputsData[inputsIndex] = parsedVal
-			inputsIndex++
+			dadosEntrada[entradasIndex] = valorConvertido
+			entradasIndex++
 		}
 	}
-	inputs := mat.NewDense(len(rawCSVData), 4, inputsData)
-	labels := mat.NewDense(len(rawCSVData), 3, labelsData)
-	return inputs, labels
+	entradas := mat.NewDense(len(rawCSVData), 4, dadosEntrada)
+	labels := mat.NewDense(len(rawCSVData), 3, labelsEntrada)
+	return entradas, labels
 }
 
 func main() {
 	
-	// Form the training matrices.
-	inputs, labels := makeInputsAndLabels("data/train.csv")
+	// Obter os dadaos para treino
+	entradas, labels := LerDados("data/train.csv")
 	
-	// Define our network architecture and learning parameters.
-	config := neuralNetConfig{
-		inputNeurons:  4,
-		outputNeurons: 3,
-		hiddenNeurons: 3,
-		numEpochs:     5000,
-		learningRate:  0.3,
+	// Definindo com será a arquitetura da nossa redeneural
+	config := redeNeuralConfig{
+		neuroniosEntrada:  4,
+		neuroniosSaida: 3,
+		neuroniosOculta: 3,
+		epocas:     5000,
+		taxaAprendizado:  0.3,
 	}
 	
-	// Train the neural network.
-	network := newNetwork(config)
-	if err := network.train(inputs, labels); err != nil {
+	// Treine a rede neural
+	network := novaRedeNeural(config)
+	if err := network.treinar(entradas, labels); err != nil {
 		log.Fatal(err)
 	}
 	
-	// Form the testing matrices.
-	testInputs, testLabels := makeInputsAndLabels("data/test.csv")
+	// Obter os dados para treino
+	testInputs, testLabels := LerDados("data/test.csv")
 	
-		// Make the predictions using the trained model.
-	predictions, err := network.predict(testInputs)
+	// faça as prediçoes usando os pesos e bias do nosso treinamento
+	predicoes, err := network.Classifique(testInputs)
 	if err != nil {
 		log.Fatal(err)
 	}
 	
-	// Calculate the accuracy of our model.
-	var truePosNeg int
-	numPreds, _ := predictions.Dims()
+	// Calcule a acuracia da nossa rede
+	var posNeg int
+	numPreds, _ := predicoes.Dims()
 	for i := 0; i < numPreds; i++ {
 	
-		// Get the label.
-		labelRow := mat.Row(nil, i, testLabels)
-		var prediction int
-		for idx, label := range labelRow {
+		// Pegue o label
+		linhaLabel := mat.Row(nil, i, testLabels)
+		var predicao int
+		for idx, label := range linhaLabel {
 			if label == 1.0 {
-				prediction = idx
+				predicao = idx
 				break
 			}
 		}
 	
-		// Accumulate the true positive/negative count.
-		if predictions.At(i, prediction) == floats.Max(mat.Row(nil, i, predictions)) {
-			truePosNeg++
+		// Acumulando os valores acertados
+		if predicoes.At(i, predicao) == floats.Max(mat.Row(nil, i, predicoes)) {
+			posNeg++
 		}
 	}
 	
-	// Calculate the accuracy (subset accuracy).
-	accuracy := float64(truePosNeg) / float64(numPreds)
-	
-	// Output the Accuracy value to standard out.
+	// Calculando a acuracia
+	accuracy := float64(posNeg) / float64(numPreds)
 	fmt.Printf("\nAccuracy = %0.2f\n\n", accuracy)
 }
