@@ -18,19 +18,19 @@ import (
 // redeNeural contem todas as informações da
 // nossa rede neural
 type redeNeural struct {
-	config  redeNeuralConfig
+	config      redeNeuralConfig
 	pesosOculta *mat.Dense
-	biasOculta *mat.Dense
-	pesosSaida    *mat.Dense
-	biasSaida    *mat.Dense
+	biasOculta  *mat.Dense
+	pesosSaida  *mat.Dense
+	biasSaida   *mat.Dense
 }
 
 // redeNeuralConfig define como nosssa rede será
 type redeNeuralConfig struct {
-	neuroniosEntrada  int
-	neuroniosSaida int
-	neuroniosOculta int
-	epocas     int
+	neuroniosEntrada int
+	neuroniosSaida   int
+	neuroniosOculta  int
+	epocas           int
 	taxaAprendizado  float64
 }
 
@@ -43,11 +43,11 @@ func novaRedeNeural(config redeNeuralConfig) *redeNeural {
 // de um eixo em especifico (0 ou 1)
 // preservando a outra dimenção
 func sumaNoEixo(eixo int, m *mat.Dense) (*mat.Dense, error) {
-	
+
 	numLinhas, numColunas := m.Dims()
-	
+
 	var saida *mat.Dense
-	
+
 	switch eixo {
 	case 0:
 		data := make([]float64, numColunas)
@@ -66,7 +66,7 @@ func sumaNoEixo(eixo int, m *mat.Dense) (*mat.Dense, error) {
 	default:
 		return nil, errors.New("Eixo ivalido, deve ser 0 ou 1")
 	}
-	
+
 	return saida, nil
 }
 
@@ -150,21 +150,21 @@ func (rn *redeNeural) backpropagate(x, y, pesosOculta, biasOculta, pesosSaida, b
 
 // inicia a rede neural, treina
 func (rn *redeNeural) treinar(x, y *mat.Dense) error {
-	
+
 	// Initialize biases/weights.
 	aleatoriedade := rand.NewSource(time.Now().UnixNano())
 	geradorAleatoriedade := rand.New(aleatoriedade)
-	
+
 	pesosOculta := mat.NewDense(rn.config.neuroniosEntrada, rn.config.neuroniosOculta, nil)
 	biasOculta := mat.NewDense(1, rn.config.neuroniosOculta, nil)
 	pesosSaida := mat.NewDense(rn.config.neuroniosOculta, rn.config.neuroniosSaida, nil)
 	biasSaida := mat.NewDense(1, rn.config.neuroniosSaida, nil)
-	
+
 	pesosOcultaRaw := pesosOculta.RawMatrix().Data
 	biasOcultaRaw := biasOculta.RawMatrix().Data
 	pesosSaidaRaw := pesosSaida.RawMatrix().Data
 	biasSaidaRaw := biasSaida.RawMatrix().Data
-	
+
 	for _, param := range [][]float64{
 		pesosOcultaRaw,
 		biasOcultaRaw,
@@ -175,27 +175,25 @@ func (rn *redeNeural) treinar(x, y *mat.Dense) error {
 			param[i] = geradorAleatoriedade.Float64()
 		}
 	}
-	
+
 	// Define a saida da rede neural
 	saida := new(mat.Dense)
 
 	if err := rn.backpropagate(x, y, pesosOculta, biasOculta, pesosSaida, biasSaida, saida); err != nil {
 		return err
 	}
-	
+
 	// Pesos e bias definidos
 	rn.pesosOculta = pesosOculta
 	rn.biasOculta = biasOculta
 	rn.pesosSaida = pesosSaida
 	rn.biasSaida = biasSaida
 
-
 	return nil
 }
 
 //  Faz a classificação/predição de um valor cujo o label é desconhecido
 func (rn *redeNeural) Classifique(x *mat.Dense) (*mat.Dense, error) {
-
 
 	if rn.pesosOculta == nil || rn.pesosSaida == nil {
 		return nil, errors.New("Os pesos estão vazios")
@@ -206,7 +204,7 @@ func (rn *redeNeural) Classifique(x *mat.Dense) (*mat.Dense, error) {
 
 	saida := new(mat.Dense)
 
-	// processo de feed forwarde com os pesos e bias que já obtemos 
+	// processo de feed forwarde com os pesos e bias que já obtemos
 	// no processo de treinamento
 	EntradasLayerOculta := new(mat.Dense)
 	EntradasLayerOculta.Mul(x, rn.pesosOculta)
@@ -285,57 +283,76 @@ func LerDados(fileName string) (*mat.Dense, *mat.Dense) {
 	return entradas, labels
 }
 
+func argmax(array []float64) (id int) {
+	var maior float64
+	for i, valor := range array {
+		// fmt.Println("valor: ", valor, "| maior: ", maior)
+		if i == 0 || valor > maior {
+			maior = valor
+			id = i
+		}
+	}
+	return
+}
+
+func compareResultados(predicoes *mat.Dense, testLabels *mat.Dense) {
+	// Calcule a acuracia da nossa rede
+	var pos int
+	numPreds, _ := predicoes.Dims() //31
+	for i := 0; i < numPreds; i++ {
+		// Pegue o label
+		labelsPred := mat.Row(nil, i, predicoes)
+		labelsTest := mat.Row(nil, i, testLabels)
+
+		idPred := argmax(labelsPred)
+		idTest := argmax(labelsTest)
+		// Acumulando os valores acertados
+		if idPred == idTest {
+			pos++
+		}
+
+	}
+
+	// Calculando a acuracia
+	accuracy := float64(pos) / float64(numPreds)
+	fmt.Printf("\nAccuracy = %0.2f\n\n", accuracy)
+}
+
 func main() {
-	
+
 	// Obter os dadaos para treino
 	entradas, labels := LerDados("data/train.csv")
-	
+
 	// Definindo com será a arquitetura da nossa redeneural
 	config := redeNeuralConfig{
-		neuroniosEntrada:  4,
-		neuroniosSaida: 3,
-		neuroniosOculta: 3,
-		epocas:     5000,
+		neuroniosEntrada: 4,
+		neuroniosSaida:   3,
+		neuroniosOculta:  3,
+		epocas:           5000,
 		taxaAprendizado:  0.3,
 	}
-	
+
 	// Treine a rede neural
 	network := novaRedeNeural(config)
 	if err := network.treinar(entradas, labels); err != nil {
 		log.Fatal(err)
 	}
-	
+
 	// Obter os dados para treino
 	testInputs, testLabels := LerDados("data/test.csv")
-	
+
 	// faça as prediçoes usando os pesos e bias do nosso treinamento
 	predicoes, err := network.Classifique(testInputs)
+	//predicoes
+	// [0.00460830847756673 0.021296504584677446 0.9803316480428076]
+	// [0.9964119941375458 2.1163958429451885e-05 0.003826695473725847]
+	// [0.996267051293573 1.9990994897586458e-05 0.0036603450119441247]
+	// [0.0001907553619645248 0.9969341479384154 0.002696496119314388]
+	// [0.004769598896995268 0.021048665853794366 0.9792240510519071]
+	// [0.0065961380125291276 0.014345256295656954 0.9719130360935284]
+	// [0.05575809559573978 4.940167692727772e-06 0.008641065294174004]
 	if err != nil {
 		log.Fatal(err)
 	}
-	
-	// Calcule a acuracia da nossa rede
-	var posNeg int
-	numPreds, _ := predicoes.Dims()
-	for i := 0; i < numPreds; i++ {
-	
-		// Pegue o label
-		linhaLabel := mat.Row(nil, i, testLabels)
-		var predicao int
-		for idx, label := range linhaLabel {
-			if label == 1.0 {
-				predicao = idx
-				break
-			}
-		}
-	
-		// Acumulando os valores acertados
-		if predicoes.At(i, predicao) == floats.Max(mat.Row(nil, i, predicoes)) {
-			posNeg++
-		}
-	}
-	
-	// Calculando a acuracia
-	accuracy := float64(posNeg) / float64(numPreds)
-	fmt.Printf("\nAccuracy = %0.2f\n\n", accuracy)
+	compareResultados(predicoes, testLabels)
 }
